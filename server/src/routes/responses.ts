@@ -30,7 +30,7 @@ import {
   traceRouteEvent,
   logRequest,
 } from './proxy.js';
-import { runFallbackLoop, newFallbackState, fallbackRoutingTokens, recordUpstreamSuccess, setFallbackHeaders, exhaustionErrorPayload, setExhaustionHeaders, type AttemptRecord } from '../lib/fallback-loop.js';
+import { getFallbackMaxAttempts, runFallbackLoop, newFallbackState, fallbackRoutingTokens, recordUpstreamSuccess, setFallbackHeaders, exhaustionErrorPayload, setExhaustionHeaders, type AttemptRecord } from '../lib/fallback-loop.js';
 import { routedViaValue, safeHeaderValue } from '../lib/header-value.js';
 import { startStreamKeepalive, streamKeepaliveMs } from '../lib/stream-keepalive.js';
 import { applyTokenBudget, tokenBudgetMessage } from '../lib/guardrails.js';
@@ -81,7 +81,6 @@ function isAutoModel(modelId: string | undefined): boolean {
 // over invisibly).
 // ─────────────────────────────────────────────────────────────────────────
 
-const MAX_RETRIES = 20;
 
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomBytes(18).toString('hex')}`;
@@ -1197,7 +1196,7 @@ export async function handleResponses(req: Request, res: Response): Promise<void
   if (routingPick && !res.headersSent) res.setHeader('X-FreeLLM-Routing-Strategy', routingStrategyHeader(routingPick));
 
   await runFallbackLoop({
-    maxRetries: MAX_RETRIES,
+    maxRetries: getFallbackMaxAttempts(),
     state,
     attemptLog,
     logIdentity: { surface: 'responses', requestId: requestGroupId, requestedModel: requestedModelLabel },

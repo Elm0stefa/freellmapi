@@ -66,8 +66,40 @@ import { withKeyProxy } from './proxy.js';
 import { getEndpointTimeBudgetMs } from './ttfb-budget.js';
 import { learnOutputCapFromError, learnedOutputCap } from './output-cap.js';
 
-// Every surface caps failover hops at the same number.
-export const FALLBACK_MAX_RETRIES = 20;
+// Every surface caps failover hops at the same number: FALLBACK_MAX_ATTEMPTS,
+// an integer in [1, 100], default 20. An invalid value falls back to the
+// default (warned once) rather than disabling the cap, so a typo can never
+// turn into an unbounded retry loop.
+export const DEFAULT_FALLBACK_MAX_ATTEMPTS = 20;
+export const FALLBACK_MAX_ATTEMPTS_MIN = 1;
+export const FALLBACK_MAX_ATTEMPTS_MAX = 100;
+/** @deprecated Use getFallbackMaxAttempts(); kept for existing imports. */
+export const FALLBACK_MAX_RETRIES = DEFAULT_FALLBACK_MAX_ATTEMPTS;
+
+export function parseFallbackMaxAttempts(raw: string | undefined): { value: number; valid: boolean } {
+  if (raw === undefined || raw.trim() === '') return { value: DEFAULT_FALLBACK_MAX_ATTEMPTS, valid: true };
+  const trimmed = raw.trim();
+  const n = Number(trimmed);
+  if (!/^\d+$/.test(trimmed) || !Number.isSafeInteger(n) || n < FALLBACK_MAX_ATTEMPTS_MIN || n > FALLBACK_MAX_ATTEMPTS_MAX) {
+    return { value: DEFAULT_FALLBACK_MAX_ATTEMPTS, valid: false };
+  }
+  return { value: n, valid: true };
+}
+
+let warnedInvalidMaxAttempts: string | undefined;
+
+export function getFallbackMaxAttempts(): number {
+  const raw = process.env.FALLBACK_MAX_ATTEMPTS;
+  const { value, valid } = parseFallbackMaxAttempts(raw);
+  if (!valid && warnedInvalidMaxAttempts !== raw) {
+    warnedInvalidMaxAttempts = raw;
+    console.warn(
+      `[fallback] FALLBACK_MAX_ATTEMPTS must be an integer from ${FALLBACK_MAX_ATTEMPTS_MIN} to ${FALLBACK_MAX_ATTEMPTS_MAX}; ` +
+      `using the default of ${DEFAULT_FALLBACK_MAX_ATTEMPTS}`,
+    );
+  }
+  return value;
+}
 
 // ── Model-level failure benching ─────────────────────────────────────────────
 // A model that keeps failing upstream (401/429/5xx/empty-stream/timeout) must
@@ -1268,7 +1300,7 @@ export interface ExhaustionInfo {
 }
 
 export interface FallbackHooks {
-  // Defaults to FALLBACK_MAX_RETRIES.
+  // Defaults to getFallbackMaxAttempts() (FALLBACK_MAX_ATTEMPTS, default 20).
   maxRetries?: number;
   // Base wall-clock retry budget override, mostly for tests. Defaults to
   // getFallbackTimeBudgetMs() (setting → env → 45s; 0 disables).
@@ -1382,7 +1414,7 @@ export async function runFallbackLoop(hooks: FallbackHooks): Promise<void> {
 }
 
 async function runFallbackLoopAttempts(hooks: FallbackHooks, trace: RequestTrace): Promise<void> {
-  const maxRetries = hooks.maxRetries ?? FALLBACK_MAX_RETRIES;
+  const maxRetries = hooks.maxRetries ?? getFallbackMaxAttempts();
   const baseBudgetMs = hooks.timeBudgetMs ?? getFallbackTimeBudgetMs();
   const startedAt = Date.now();
   const attempts: AttemptRecord[] = hooks.attemptLog ?? [];

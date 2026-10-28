@@ -29,7 +29,7 @@ import { logRequest } from '../lib/request-log.js';
 import { observeServedModel } from '../lib/served-model.js';
 import { parseCacheDirective, cacheActive, isCacheableTemperature, computeCacheKey, getCachedResponse, storeCachedResponse, getCachedStreamResponse, storeCachedStreamResponse, STREAM_CACHE_MAX_BYTES } from '../services/cache.js';
 import { normalizeIdempotencyKey, hashIdempotencyKey, computeIdempotencyFingerprint, lookupIdempotencyReplay, storeIdempotencyResult } from '../services/idempotency.js';
-import { runFallbackLoop, newFallbackState, fallbackRoutingTokens, recordUpstreamSuccess, exhaustedRetryError, setFallbackHeaders, exhaustionErrorPayload, setExhaustionHeaders, type AttemptRecord, REASONING_HOLD_MAX_MS } from '../lib/fallback-loop.js';
+import { getFallbackMaxAttempts, runFallbackLoop, newFallbackState, fallbackRoutingTokens, recordUpstreamSuccess, exhaustedRetryError, setFallbackHeaders, exhaustionErrorPayload, setExhaustionHeaders, type AttemptRecord, REASONING_HOLD_MAX_MS } from '../lib/fallback-loop.js';
 import { routedViaValue, safeHeaderValue } from '../lib/header-value.js';
 import { applyTokenBudget, tokenBudgetMessage } from '../lib/guardrails.js';
 import { samplingParamSchemaFields, pickSamplingParams, supportedParametersForPlatforms } from '../lib/sampling-params.js';
@@ -624,7 +624,6 @@ proxyRouter.get('/usage', (req: Request, res: Response) => {
 });
 
 
-const MAX_RETRIES = 20;
 
 // Echo-tolerant tool calls: agents replay OUR responses back as history, and
 // not all of them preserve the strict OpenAI shape. `type` may be dropped
@@ -1521,7 +1520,7 @@ proxyRouter.post('/completions', async (req: Request, res: Response) => {
   // (lib/fallback-loop.ts): the cooldown/skip/penalty/exhaustion machinery is
   // shared; only the text_completion request/stream translation lives here.
   await runFallbackLoop({
-    maxRetries: MAX_RETRIES,
+    maxRetries: getFallbackMaxAttempts(),
     state,
     attemptLog,
     logIdentity: { surface: 'legacy completions', requestId: requestGroupId, requestedModel: requestedModelLabel },
@@ -2502,7 +2501,7 @@ proxyRouter.post('/chat/completions', async (req: Request, res: Response) => {
   if (routingPick && !res.headersSent) res.setHeader('X-FreeLLM-Routing-Strategy', routingStrategyHeader(routingPick));
 
   await runFallbackLoop({
-    maxRetries: MAX_RETRIES,
+    maxRetries: getFallbackMaxAttempts(),
     state,
     attemptLog,
     logIdentity: { surface: 'chat completions', requestId: requestGroupId, requestedModel: requestedModelLabel },

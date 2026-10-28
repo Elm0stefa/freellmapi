@@ -135,7 +135,12 @@ Recommended setup (your decision; nothing here was changed for you):
    `.env` to stop a request after 3 consecutive upstream failures instead of
    walking the whole chain. It's off by default; the trade-off is fewer
    fallback hops when the first few candidates are down.
-4. **For debugging only,** `FALLBACK_DETAIL_HEADER=1` adds per-hop timing and
+4. **Attempt cap.** `FALLBACK_MAX_ATTEMPTS` (an integer from 1 to 100,
+   default 20) caps failover hops on every chat surface: the OpenAI-compatible
+   proxy, `/v1/messages`, `/v1/responses`, and the Gemini/Ollama emulation. An
+   invalid value logs one warning and keeps the default 20; it never removes
+   the cap. The 45 s time budget still applies on top.
+5. **For debugging only,** `FALLBACK_DETAIL_HEADER=1` adds per-hop timing and
    error text to responses. Leave it off normally, because it puts provider
    error text on every response.
 
