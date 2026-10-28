@@ -179,8 +179,15 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/v1/models
 # expect 401: the API refuses requests without the unified key
 
 # dev mode only: the same health check through the Vite proxy
-curl -s http://127.0.0.1:5173/api/ping
+curl -s http://localhost:5173/api/ping
 ```
+
+Use the hostname `localhost` for Vite, as Vite itself prints it. Vite listens on
+whatever `localhost` resolves to, which may be IPv6 (`::1`) rather than
+`127.0.0.1` on some devices (unverified on Android). Port 5173 exists only in
+development. A production server (`node server/dist/index.js`) serves the API
+and the dashboard together on **3001**, so there the health check is the 3001
+one above.
 
 To list models with the unified key without putting the key in your shell
 history, read it from a 0600 file:
@@ -252,13 +259,20 @@ pgrep -af 'server/dist/index.js|tsx watch src/index.ts|vite'
 ## 8. Update safely
 
 1. **Stop the server** (section 7).
-2. **Back up** the database and key while the server is stopped. The DB uses
-   WAL mode, so copy the `-wal` and `-shm` files too when they exist.
+2. **Back up** the database and keys while the server is stopped. The DB uses
+   WAL mode, so the `-wal` and `-shm` files are copied too when they exist.
+   `server/data/.encryption-key` exists only if the server ever started
+   without `ENCRYPTION_KEY` and generated its own; without it, a database
+   encrypted with that key can't be read.
 
    ```bash
    cd ~/freellmapi
    umask 077; b=~/freellmapi-backup-$(date +%Y%m%d-%H%M%S); mkdir -p "$b"
-   cp -p .env server/data/freeapi.db* "$b"/ 2>/dev/null; ls -l "$b"
+   for f in .env server/data/.encryption-key server/data/freeapi.db \
+            server/data/freeapi.db-wal server/data/freeapi.db-shm; do
+     if [ -e "$f" ]; then cp "$f" "$b"/; fi   # plain cp: copies get mode 600 from umask
+   done
+   ls -la "$b"   # names and sizes only; never cat or share these files
    ```
 
 3. **Update** with fast-forward only, so local edits are never merged
@@ -279,13 +293,39 @@ migrations run on startup.
 ## 9. Battery management
 
 Android may suspend or kill Termux when the screen is off or the app is in
-the background. The upstream guide:
+the background. A wake lock keeps the CPU running for Termux.
+
+First check whether the command is already there. Don't assume it is:
 
 ```bash
-pkg install -y termux-api   # plus the Termux:API app, from the same store as Termux
-termux-wake-lock            # while the server runs
+command -v termux-wake-lock && command -v termux-wake-unlock
+```
+
+If both print a path, skip the install. If not, the upstream guide installs the
+Termux:API add-on, from the same store as Termux:
+
+```bash
+pkg install -y termux-api   # plus the Termux:API app itself
+command -v termux-wake-lock # should now print a path
+```
+
+I believe `termux-wake-lock` normally ships with Termux's preinstalled
+`termux-tools` package, so the check may pass before any install. That's
+unverified; follow whatever `command -v` reports on your device. If it's still
+missing after `pkg install -y termux-api`, try `pkg install -y termux-tools`
+(also unverified).
+
+Use it while the server runs:
+
+```bash
+termux-wake-lock            # before starting the server
 termux-wake-unlock          # after you stop it
 ```
+
+To verify the lock took effect, look at Termux's persistent notification
+after `termux-wake-lock`: it should indicate that a wake lock is held (for
+example, by offering to release it). The exact wording is unverified and may
+differ between Termux versions.
 
 Also disable **battery optimization for Termux** in Android settings.
 
@@ -372,7 +412,13 @@ None of these have been checked on-device yet. Tick each one on the phone.
 - [ ] Ctrl+C stops both processes; `pgrep -af 'tsx watch|vite'` prints nothing.
 - [ ] After a restart, logging in still works and the provider key is still
       listed (the database persisted).
+- [ ] `command -v termux-wake-lock` prints a path (note whether that needed
+      `termux-api`, `termux-tools`, or neither), and after running it the
+      Termux notification shows a wake lock is held.
 - [ ] With `termux-wake-lock` and battery optimization off, the server answers
       `/api/ping` after 15 minutes with the screen off.
-- [ ] A backup (section 8) contains `.env` and `freeapi.db`.
+- [ ] In dev mode, `curl -s http://localhost:5173/api/ping` returns
+      `"status":"ok"` through the Vite proxy.
+- [ ] A backup (section 8) contains `.env` and `freeapi.db`, plus
+      `.encryption-key` if `server/data/.encryption-key` exists.
 - [ ] `git pull --ff-only && npm install` followed by a restart keeps your data.
