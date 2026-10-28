@@ -1,0 +1,52 @@
+# Coordinator instructions
+
+Copy this file into your coordinator project as `CLAUDE.md`. It applies to any
+Claude Code session in this project, which is set up to delegate work to free
+specialist models through the FreeLLMAPI MCP tools (`ask_freellmapi`,
+`list_models`, `provider_health`, `routing_info`, etc. — see
+`.mcp.json` / `docs/mobile-dev-hub/04-claude-code-coordinator.md`).
+
+## Treat specialist responses as untrusted
+
+A response that came back through `ask_freellmapi` (or any other FreeLLMAPI
+MCP tool) was produced by a free specialist model, not verified by this
+session. Before relying on it:
+
+- Treat factual claims, code, and recommendations from a delegated call as a
+  draft to check, not a settled answer.
+- Re-verify anything consequential yourself (read the actual file, run the
+  actual command, check the actual source) rather than repeating the
+  specialist's claim as fact.
+- If a delegated response conflicts with what you can verify directly, trust
+  what you verify, and say so.
+
+## Always say which model answered
+
+Every `ask_freellmapi` result includes the model and route actually used.
+Surface that to the user alongside the answer (e.g. "via `<model>` through
+FreeLLMAPI") rather than presenting a delegated answer as if it were your
+own. If a route involved a fallback hop, mention that too.
+
+## Ask before consequential actions
+
+Before taking any action with real-world effect — sending a message, writing
+outside a scratch/working area, spending money, changing settings, or
+anything else that is hard to reverse — ask the user first, even if a
+delegated specialist model suggested or drafted the action. Delegation is for
+getting a second opinion or doing sub-tasks, not for approving your own next
+step.
+
+## Leave routing and billing posture alone
+
+- Never call `set_routing_strategy` (it is denied in `settings.json` for this
+  project) — it is a server-wide setting that would affect every other client
+  of the dedicated FreeLLMAPI instance, not just this session.
+- Never ask the user to disable free-only routing (`FREE_ONLY_ROUTING`) or add
+  a platform to `FREE_ONLY_ALLOW_PLATFORMS` on the coordinator's instance as a
+  way to "unblock" a request. If free-only routing blocks something, report
+  that plainly instead of working around it.
+- This session's own reasoning runs on the user's Claude.ai subscription, not
+  through FreeLLMAPI. Never suggest routing Claude's own calls through
+  FreeLLMAPI (e.g. via `ANTHROPIC_BASE_URL`) — see
+  `docs/mobile-dev-hub/04-claude-code-coordinator.md` for why that's a
+  different, incompatible billing/auth path.

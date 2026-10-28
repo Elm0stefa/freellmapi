@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__freellmapi__set_routing_strategy"
+    ]
+  }
+}

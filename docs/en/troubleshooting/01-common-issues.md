@@ -66,6 +66,59 @@
 
 **Fix:** `TRUST_PROXY=1` for single reverse proxy (Caddy/nginx/Traefik on same host), or CIDR list (`TRUST_PROXY=100.64.0.0/10,192.168.1.10`). See `env/01-variables.md` `TRUST_PROXY` + `server/src/lib/config.ts:95-110` `parseTrustProxy()`.
 
+## Gemini request fails with a DNS-looking error
+
+**Symptom:** A request routed to a Gemini model fails before any HTTP
+response comes back — the error text contains `fetch failed`, `ENOTFOUND`,
+or `EAI_AGAIN`, rather than a JSON error body with an HTTP status.
+
+**How to tell this apart from other Gemini failures.** `server/src/lib/
+error-classify.ts` already distinguishes these by shape, not by guessing —
+check which bucket the actual error falls into before assuming a cause:
+
+| Failure kind | What you'll see | Where it's classified |
+| --- | --- | --- |
+| DNS / transport | No HTTP status at all; message has `ENOTFOUND`, `EAI_AGAIN`, or the generic undici wrapper `fetch failed` | `error-classify.ts` lines ~27-30 and ~136-139 (listed alongside `ECONNREFUSED`/`ECONNRESET`/`ETIMEDOUT` as retryable transport errors) |
+| API key / auth | HTTP `401`/`403`, JSON body mentions the key | Provider-specific auth-error handling elsewhere in `error-classify.ts` |
+| Quota | HTTP `429` | Standard rate-limit handling |
+| Request too large | HTTP `400 INVALID_ARGUMENT`, e.g. *"The input token count (1200000) exceeds the maximum number of tokens allowed (1048576)"* | `error-classify.ts:487` (documented Gemini-specific wording) |
+
+If the failing request got any HTTP status code back at all, it is **not**
+the DNS/transport case in this entry — `fetch failed`/`ENOTFOUND`/`EAI_AGAIN`
+mean the request never reached a server to get a status from.
+
+**Safe diagnostic steps (read-only, change nothing):**
+
+1. Check the exact recorded error text for that request — the dashboard's
+   request log or the `provider_health` MCP tool — rather than assuming
+   from a summary.
+2. Check whether *other* providers/models are failing the same way at the
+   same time. If so, this points at a system-wide proxy/DNS/network problem
+   rather than anything Gemini-specific.
+3. Check which outbound-proxy env vars are actually in effect
+   (`PROXY_MODE`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY`) —
+   see `docs/en/env/03-outbound-proxies.md` — without changing them yet.
+4. Try resolving the Gemini API hostname
+   (`generativelanguage.googleapis.com`) with whatever DNS tool is available
+   on the machine, to see if resolution itself is the failure point.
+
+**Possible causes (not a confirmed diagnosis — just where to look):**
+
+- Outbound DNS resolution failing for this hostname specifically, or for all
+  outbound requests.
+- A configured proxy (`PROXY_URL`/`HTTPS_PROXY`/etc.) that is down,
+  misconfigured, or not actually in the request path the server expects.
+- A network that blocks or filters `generativelanguage.googleapis.com`
+  specifically (corporate DNS/firewall, or a DNS-poisoned network — see the
+  `socks5h://` note in `docs/en/proxy/OVERVIEW.md` about resolving DNS at
+  the proxy on such networks).
+- A transient outage on Google's side.
+
+None of these is asserted as the actual cause of any specific occurrence —
+this entry exists to separate the DNS/transport failure *shape* from
+unrelated Gemini error shapes (auth, quota, request size) so the right
+category gets investigated first.
+
 ## Related
 
 - [Desktop](../desktop/OVERVIEW.md) — `freeapi.log` rotation.
