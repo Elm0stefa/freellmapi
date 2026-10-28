@@ -38,6 +38,13 @@ describe('GLIXEL source', () => {
     ])
   })
 
+  it('calls fetch directly only in the session client, plus the unauthenticated /api/ping probe', () => {
+    const raw = files.filter(f => /\bfetch\(/.test(f.src)).map(f => f.p).sort()
+    expect(raw).toEqual(['lib/chat.ts', 'lib/session.ts'])
+    const chat = files.find(f => f.p === 'lib/chat.ts')!.src
+    expect([...chat.matchAll(/\bfetch\(([^,)]+)/g)].map(m => m[1])).toEqual(["'/api/ping'"])
+  })
+
   it('writes only to the chat endpoint, the conversation store and the listed Control Room actions', () => {
     const writes = files.flatMap(({ src }) => [...src.matchAll(/apiSend(?:Json)?(?:<[^>]*>)?\(\s*'(POST|PUT|DELETE)',\s*['`]([^'`$]+)/g)].map(m => `${m[1]} ${m[2]}`))
     expect([...new Set(writes)].sort()).toEqual([

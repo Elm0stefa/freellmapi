@@ -101,11 +101,70 @@ describe('streamChat', () => {
     expect(out.error).toBeNull()
   })
 
-  it('says when the server is unreachable', async () => {
+  it('says when the server is unreachable, with the browser error and the ping result', async () => {
     localStorage.setItem(SESSION_TOKEN_KEY, 't')
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+    const fetch = vi.fn(async () => { throw new TypeError('Failed to fetch') })
+    vi.stubGlobal('fetch', fetch)
     const out = await streamChat([{ role: 'user', content: 'hi' }])
     expect(out.error?.code).toBe('network_error')
-    expect(errorHint('network_error', null)).toMatch(/server running/)
+    expect(out.error?.message).toMatch(/Could not reach your FreeLLMAPI server \(TypeError: Failed to fetch, after \d+\.\d s\)\. It did not answer GET \/api\/ping either\./)
+    expect(errorHint('network_error', null)).toMatch(/still running/)
+    // the probe is the unauthenticated ping and carries no session
+    const ping = fetch.mock.calls.find(c => (c as unknown[])[0] === '/api/ping') as unknown as [string, RequestInit]
+    expect(ping[1].credentials).toBe('omit')
+    expect(ping[1].headers).toBeUndefined()
+  })
+
+  it('tells a dropped chat connection apart from a server that is down', async () => {
+    localStorage.setItem(SESSION_TOKEN_KEY, 't')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/ping') return new Response('{"status":"ok"}', { status: 200 })
+      throw new TypeError('network error')
+    }))
+    const out = await streamChat([{ role: 'user', content: 'hi' }])
+    expect(out.error?.code).toBe('connection_dropped')
+    expect(out.error?.message).toMatch(/server is running, but this chat request's connection failed after \d+\.\d s.*\(TypeError: network error\)/)
+  })
+
+  it('reports a stream cut mid-answer with what arrived, the browser error and the server state', async () => {
+    localStorage.setItem(SESSION_TOKEN_KEY, 't')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/ping') return new Response('{"status":"ok"}', { status: 200 })
+      return new Response(new ReadableStream({
+        start(c) { c.enqueue(new TextEncoder().encode(ev({ type: 'delta', text: 'partial' }))) },
+        pull(c) { if (c.desiredSize !== null && c.desiredSize > 0) c.error(new TypeError('network error')) },
+      }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }))
+    const out = await streamChat([{ role: 'user', content: 'hi' }])
+    expect(out.text).toBe('partial')
+    expect(out.error?.code).toBe('stream_interrupted')
+    expect(out.error?.message).toMatch(/dropped after .* \(TypeError: network error\)\. The server is still running\./)
+  })
+
+  it('recognises a web page served where the API should be', async () => {
+    localStorage.setItem(SESSION_TOKEN_KEY, 't')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><title>x</title>', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })))
+    const out = await streamChat([{ role: 'user', content: 'hi' }])
+    expect(out.error?.code).toBe('not_api')
+    expect(errorHint('not_api', 200)).toMatch(/localhost:<port>\/glixel/)
+  })
+
+  it('reports an expired session from the server, not a network problem', async () => {
+    localStorage.setItem(SESSION_TOKEN_KEY, 'expired')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'Authentication required', type: 'authentication_error' } }), { status: 401, headers: { 'content-type': 'application/json' } })))
+    const out = await streamChat([{ role: 'user', content: 'hi' }])
+    expect(out.error).toMatchObject({ status: 401, message: 'Authentication required' })
+    expect(errorHint(out.error!.code, 401)).toMatch(/Sign in on the dashboard again/)
+  })
+
+  it('keeps an abort during the failure probe an abort', async () => {
+    localStorage.setItem(SESSION_TOKEN_KEY, 't')
+    const controller = new AbortController()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/ping') { controller.abort(); return new Response('{}', { status: 200 }) }
+      throw new TypeError('Failed to fetch')
+    }))
+    const out = await streamChat([{ role: 'user', content: 'hi' }], { signal: controller.signal })
+    expect(out.aborted).toBe(true)
   })
 })

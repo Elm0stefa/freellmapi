@@ -50,6 +50,9 @@ const WRITABLE: Array<[WriteMethod, RegExp]> = [
   ['PUT', /^\/api\/fallback\/routing$/],
 ]
 
+/** Thrown when GLIXEL itself refuses a write; the request never left the browser. */
+export class RefusedWriteError extends Error {}
+
 export function isWritable(method: WriteMethod, path: string): boolean {
   return WRITABLE.some(([m, re]) => m === method && re.test(path))
 }
@@ -65,7 +68,7 @@ async function serverMessage(res: Response): Promise<string | null> {
 
 /** Authenticated request with a JSON body (or none). Returns the raw Response. */
 export async function apiSend(method: WriteMethod, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
-  if (!isWritable(method, path)) throw new Error(`GLIXEL does not ${method} ${path}`)
+  if (!isWritable(method, path)) throw new RefusedWriteError(`GLIXEL does not ${method} ${path}`)
   const token = getSessionToken()
   if (!token) throw new ApiError(401, 'Not signed in')
   return fetch(path, {
