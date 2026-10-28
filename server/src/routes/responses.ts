@@ -836,6 +836,8 @@ export async function handleResponses(req: Request, res: Response): Promise<void
   // Priority: explicit model > sticky session > auto routing.
   let preferredModel: number | undefined;
   let groupChain: ChainRow[] | undefined;
+  // Rows the client named; only these get the explicit free-only policy.
+  let explicitModelIds: Set<number> | undefined;
   let resolvedChain: ResolvedChain | undefined;
 
   // Sticky scope for a named auto:<profile> (or auto:smart) chain. Plain `auto`
@@ -874,6 +876,8 @@ export async function handleResponses(req: Request, res: Response): Promise<void
     const members = resolved?.memberDbIds ?? null;
     if (members && members.length > 0) {
       groupChain = resolveModelGroupCandidates(members, resolved!.demotedDbIds);
+      // The client named this model: every provider of it is an explicit choice.
+      explicitModelIds = new Set(groupChain.map(r => r.model_db_id));
       if (groupChain.length === 0) {
         const placeholders = members.map(() => '?').join(',');
         const anyEnabled = db.prepare(`SELECT 1 FROM models WHERE id IN (${placeholders}) AND enabled = 1 LIMIT 1`).get(...members);
@@ -893,6 +897,7 @@ export async function handleResponses(req: Request, res: Response): Promise<void
       const enabled = db.prepare('SELECT id FROM models WHERE model_id = ? AND enabled = 1').get(routedModel) as { id: number } | undefined;
       if (enabled) {
         preferredModel = enabled.id;
+        explicitModelIds = new Set([enabled.id]);
       } else {
         const disabled = db.prepare('SELECT id FROM models WHERE model_id = ?').get(routedModel) as { id: number } | undefined;
         const reason = disabled ? 'is disabled' : 'is not in the catalog';
@@ -1209,7 +1214,7 @@ export async function handleResponses(req: Request, res: Response): Promise<void
       // size latched onto state so the existing size gates in router.ts skip
       // low-TPM / small-context models on retry.
       const routingTotal = fallbackRoutingTokens(state, estimatedTotal, outputReserve);
-      return routeRequest(routingTotal, state.skipKeys.size > 0 ? state.skipKeys : undefined, preferredModel, hasImage, wantsTools, state.skipModels.size > 0 ? state.skipModels : undefined, groupChain ?? resolvedChain?.chain, completionOpts.response_format !== undefined, state.skipPlatforms.size > 0 ? state.skipPlatforms : undefined, outputReserve, taskType);
+      return routeRequest(routingTotal, state.skipKeys.size > 0 ? state.skipKeys : undefined, preferredModel, hasImage, wantsTools, state.skipModels.size > 0 ? state.skipModels : undefined, groupChain ?? resolvedChain?.chain, completionOpts.response_format !== undefined, state.skipPlatforms.size > 0 ? state.skipPlatforms : undefined, outputReserve, taskType, explicitModelIds);
     },
     dispatch: async (route, attempt, ctx) => {
       const contextBudget = routeOutputBudget(route, estimatedInputTokens);

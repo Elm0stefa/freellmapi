@@ -1180,10 +1180,13 @@ function formatClassBreakdown(attempts: readonly AttemptRecord[]): string {
 //     expiry as retryAtMs.
 //   - anything else (capability filters like vision/tools, mixed reasons) →
 //     the router's status (429) with a generic routing_exhausted code.
-type RoutingDiagClass = 'config' | 'too_large' | 'time_bound' | 'monthly_budget' | 'other';
+type RoutingDiagClass = 'policy' | 'config' | 'too_large' | 'time_bound' | 'monthly_budget' | 'other';
 
 function classifyRoutingDiagLine(line: string): RoutingDiagClass {
   const l = line.toLowerCase();
+  // Free-only routing (services/free-only.ts) refused this candidate on cost
+  // grounds; waiting will not change that, so it is neither config nor time.
+  if (l.includes('blocked by free-only routing')) return 'policy';
   // "< estimated" first: the tpm_limit-too-small line also contains 'tpm',
   // which would otherwise misread as a transient window.
   if (l.includes('< estimated')) return 'too_large';
@@ -1198,6 +1201,23 @@ export function routingExhaustionBody(routeErr: any): ExhaustionBody {
   const diag: string[] = Array.isArray(routeErr?.diagnostics) ? routeErr.diagnostics : [];
   const message: string = routeErr?.message ?? 'No model available to route this request';
   const classes = diag.map(classifyRoutingDiagLine);
+
+  // Every candidate that had a key was refused by free-only routing. Say so
+  // plainly (403) instead of a 429 that tells the client to wait.
+  if (classes.includes('policy') && classes.every(c => c === 'policy' || c === 'config')) {
+    const blocked = diag.filter((_, i) => classes[i] === 'policy');
+    const shown = blocked.slice(0, 5).join('; ');
+    const more = blocked.length > 5 ? ` (+${blocked.length - 5} more)` : '';
+    return {
+      kind: 'bad_request',
+      status: 403,
+      type: 'permission_error',
+      code: 'free_only_blocked',
+      message: `Free-only routing refused every candidate for this request: ${shown}${more}. ` +
+        'Only documented free providers are used automatically; opt a platform in with FREE_ONLY_ALLOW_PLATFORMS ' +
+        'or add a key for a free provider.',
+    };
+  }
 
   if (diag.length === 0 || classes.every(c => c === 'config')) {
     return {

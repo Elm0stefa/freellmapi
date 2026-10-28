@@ -610,6 +610,9 @@ export async function handleMessages(req: Request, res: Response): Promise<void>
   // router scores inside — failover stays within the band instead of falling
   // off to an unrelated model.
   let groupChain: ChainRow[] | undefined;
+  // Rows the client (or the operator's family mapping) named; only these get
+  // the explicit free-only policy. A tier selector stays automatic.
+  let explicitModelIds: Set<number> | undefined;
   // Sticky scope for a group-pinned request: bucket by the pinned catalog id so
   // the session prefers its last successful provider of THIS model without
   // leaking affinity across groups. Undefined for auto (the global scope).
@@ -625,6 +628,7 @@ export async function handleMessages(req: Request, res: Response): Promise<void>
       if (chain.length > 0) {
         groupChain = chain;
         stickyScope = resolved.modelId;
+        explicitModelIds = new Set(chain.map(r => r.model_db_id));
       }
     }
   } else if (resolved.tierDbIds && resolved.tierDbIds.length > 0) {
@@ -640,6 +644,8 @@ export async function handleMessages(req: Request, res: Response): Promise<void>
   }
 
   let preferredModel = resolved.preferredModelDbId;
+  // A legacy single-row pin (no unified group) is explicit too.
+  if (!groupChain && resolved.modelId && preferredModel != null) explicitModelIds = new Set([preferredModel]);
   if (groupChain) {
     // The strict chain already fixes the model; the only preference left is
     // which member served this session last. Passing a non-member would make
@@ -704,7 +710,7 @@ export async function handleMessages(req: Request, res: Response): Promise<void>
       // size latched onto state so the existing size gates in router.ts skip
       // low-TPM / small-context models on retry.
       const routingTotal = fallbackRoutingTokens(state, estimatedTotal, outputReserve);
-      return routeRequest(routingTotal, state.skipKeys.size > 0 ? state.skipKeys : undefined, preferredModel, hasImage, wantsTools, state.skipModels.size > 0 ? state.skipModels : undefined, groupChain ?? resolvedChain?.chain, false, state.skipPlatforms.size > 0 ? state.skipPlatforms : undefined, outputReserve, taskType);
+      return routeRequest(routingTotal, state.skipKeys.size > 0 ? state.skipKeys : undefined, preferredModel, hasImage, wantsTools, state.skipModels.size > 0 ? state.skipModels : undefined, groupChain ?? resolvedChain?.chain, false, state.skipPlatforms.size > 0 ? state.skipPlatforms : undefined, outputReserve, taskType, explicitModelIds);
     },
     dispatch: async (route, attempt, dispatchCtx) => {
       const contextBudget = routeOutputBudget(route, estimatedInputTokens);

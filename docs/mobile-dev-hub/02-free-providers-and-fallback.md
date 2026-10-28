@@ -144,6 +144,40 @@ Recommended setup (your decision; nothing here was changed for you):
    error text to responses. Leave it off normally, because it puts provider
    error text on every response.
 
+### Free-only routing (on by default)
+
+The router won't send traffic anywhere that could bill you unless you opt in
+(`server/src/services/free-only.ts`, using `server/src/providers/metadata.ts`).
+
+- **Automatic routing** (`auto`, named chains, model groups, failover hops,
+  auto-picked fusion slots) uses a model only if all of these hold:
+  - its provider is classed `free-recurring`, or `free-model-subset` and the
+    model matches the free rule (for example OpenRouter `:free`, Zhipu
+    `-flash`, Google excluding Pro);
+  - the repository's evidence for that is at least `medium`;
+  - the provider isn't recorded as training on prompts.
+
+  So trial keys (Cohere), recurring credits (Hugging Face, ElectronHub,
+  Experiential, Speka, Moondream), promotions, paid-beyond-free (Sail,
+  Volcengine), paid, retired, unknown and low-confidence providers, and your
+  own custom endpoints are skipped.
+- **A model you name explicitly** is also allowed when it can't bill: trial keys
+  and your custom endpoints. Credit-based, promotional, paid, unknown, and
+  non-free models of a mixed provider are still refused.
+- **When everything usable is refused,** the response is
+  `403 free_only_blocked`, naming the blocked models. It is never a misleading
+  429.
+- **To opt in,** set `FREE_ONLY_ALLOW_PLATFORMS=custom,sail` (comma-separated)
+  in `.env`, for both modes. The server logs a warning at startup for each
+  opted-in platform that can consume credit or be billed.
+  `FREE_ONLY_ROUTING=off` restores the old behaviour and logs a warning too.
+- **Sticky preference** from an earlier automatic choice is still treated as
+  automatic.
+
+Provider classifications come only from this repository's own notes. None
+has been checked against official documentation yet (`officialDocsVerifiedOn`
+is empty for every provider), so treat them as best-effort.
+
 ## 5. Secrets and backups
 
 - **Where provider keys go:** enter them only on the dashboard **Keys** page.
