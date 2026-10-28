@@ -7,6 +7,7 @@ import {
 } from '@/lib/telemetry'
 import { IntelligenceCore } from './IntelligenceCore'
 import { TelemetryPanel } from './TelemetryPanel'
+import { SignInRequired } from './SignInRequired'
 
 // Read-only command center. All figures come from existing session-gated
 // endpoints (GET /api/providers, GET /api/health); nothing is written and no
@@ -21,22 +22,6 @@ function useNow(intervalMs: number): number {
     return () => window.clearInterval(id)
   }, [intervalMs])
   return now
-}
-
-function SignInRequired() {
-  return (
-    <main className="glx-shell flex min-h-dvh items-center justify-center px-4">
-      <section className="glx-panel max-w-sm w-full text-center space-y-4">
-        <IntelligenceCore />
-        <h1 className="text-xl font-semibold tracking-wide">GLIXEL is locked</h1>
-        <p className="text-sm text-glx-muted">
-          Sign in on the FreeLLMAPI dashboard, then come back to <span className="font-mono">/glixel</span>.
-          GLIXEL uses the same session and never asks for API keys.
-        </p>
-        <a className="glx-button" href="/">Open the dashboard sign-in</a>
-      </section>
-    </main>
-  )
 }
 
 const STATE_DOT: Record<string, string> = {
@@ -74,16 +59,7 @@ export function CommandCenter() {
   const degradation = health.data?.degradation
 
   return (
-    <main className="glx-shell min-h-dvh px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
-      <div className="mx-auto max-w-5xl">
-        <header className="flex items-center justify-between gap-3 py-3">
-          <div>
-            <h1 className="glx-wordmark">GLIXEL</h1>
-            <p className="text-xs text-glx-muted">The pixel remembers what the signal forgot.</p>
-          </div>
-          <a className="glx-link text-xs" href="/">Dashboard</a>
-        </header>
-
+    <div className="pb-6">
         <section className="grid gap-4 md:grid-cols-[minmax(0,320px)_1fr] items-start">
           <div className="glx-panel">
             <IntelligenceCore />
@@ -170,7 +146,6 @@ export function CommandCenter() {
           <p><span className="glx-chip glx-chip-live">Live</span> read from your FreeLLMAPI server; each panel names its endpoint and time.</p>
           <p><span className="glx-visual-only static">visual only</span> decoration, not data. The animated core shows nothing about system state.</p>
         </footer>
-      </div>
-    </main>
+    </div>
   )
 }

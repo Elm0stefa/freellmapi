@@ -60,6 +60,7 @@ afterEach(() => {
   act(() => root.unmount()); container.remove()
   localStorage.clear(); vi.unstubAllGlobals()
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+  window.location.hash = ''
 })
 
 function stubApi(responses: Record<string, () => Response>) {
@@ -70,6 +71,7 @@ function stubApi(responses: Record<string, () => Response>) {
 const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status })
 
 async function render(node: React.ReactNode) {
+  window.location.hash = 'status'
   act(() => root.render(node))
   for (let i = 0; i < 6; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)) })
 }

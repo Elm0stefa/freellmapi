@@ -22,6 +22,7 @@ import { decisionsRouter } from './routes/decisions.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { healthRouter } from './routes/health.js';
 import { providerOverviewRouter } from './routes/providers.js';
+import { glixelRouter } from './routes/glixel.js';
 import { freeTierRouter } from './routes/free-tier.js';
 import { settingsRouter } from './routes/settings.js';
 import { premiumRouter } from './routes/premium.js';
@@ -275,6 +276,7 @@ export function createApp(config?: Config) {
   app.use('/api/analytics', requireAuth, analyticsRouter);
   app.use('/api/health', requireAuth, healthRouter);
   app.use('/api/providers', requireAuth, providerOverviewRouter);
+  app.use('/api/glixel', requireAuth, glixelRouter);
   app.use('/api/free-tier', requireAuth, freeTierRouter);
   app.use('/api/settings', requireAuth, settingsRouter);
   app.use('/api/premium', requireAuth, premiumRouter);

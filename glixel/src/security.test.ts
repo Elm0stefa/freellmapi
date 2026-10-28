@@ -3,10 +3,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// Static guarantees for Increment 1: GLIXEL is read-only, never touches
-// key-bearing or proxy endpoints, writes nothing to storage, and bakes no
-// environment into its bundle. Scans the source, and the built bundle when one
-// exists.
+// Static guarantees: GLIXEL never touches key-bearing or proxy endpoints, writes
+// only to its chat endpoint and the existing conversation store, writes nothing
+// to browser storage, and bakes no environment into its bundle. Scans the
+// source, and the built bundle when one exists.
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const sources = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
@@ -20,7 +20,7 @@ describe('GLIXEL source', () => {
   it.each([
     ['the unified-key endpoint', /api-key/],
     ['the /v1 proxy', /['"`]\/v1\//],
-    ['write methods', /method:\s*['"](POST|PUT|PATCH|DELETE)['"]/i],
+    ['PATCH', /['"]PATCH['"]/],
     ['storage writes', /(localStorage|sessionStorage)\.(setItem|removeItem|clear)/],
     ['build-time environment', /import\.meta\.env|process\.env/],
     ['inline HTML injection', /dangerouslySetInnerHTML/],
@@ -28,9 +28,18 @@ describe('GLIXEL source', () => {
     for (const { p, src } of files) expect(src, p).not.toMatch(pattern)
   })
 
-  it('reads only the session-gated endpoints of this increment', () => {
-    const endpoints = new Set(files.flatMap(({ src }) => [...src.matchAll(/apiGet<[^>]*>\('([^']+)'\)/g)].map(m => m[1])))
-    expect([...endpoints].sort()).toEqual(['/api/health', '/api/providers'])
+  it('reads only the session-gated endpoints it needs', () => {
+    const reads = new Set(files.flatMap(({ src }) => [...src.matchAll(/apiGet(?:<.*?>)?\(['`]([^'`$]+)/g)].map(m => m[1])))
+    expect([...reads].sort()).toEqual(['/api/conversations', '/api/conversations/', '/api/health', '/api/providers'])
+  })
+
+  it('writes only to the chat endpoint and the conversation store', () => {
+    const writes = files.flatMap(({ src }) => [...src.matchAll(/apiSend(?:Json)?(?:<[^>]*>)?\(\s*'(POST|PUT|DELETE)',\s*['`]([^'`$]+)/g)].map(m => `${m[1]} ${m[2]}`))
+    expect([...new Set(writes)].sort()).toEqual([
+      'DELETE /api/conversations/', 'POST /api/conversations', 'POST /api/glixel/chat', 'PUT /api/conversations/',
+    ])
+    const session = files.find(f => f.p.endsWith('session.ts'))!.src
+    expect(session).toMatch(/const WRITABLE = \[/)
   })
 })
 
