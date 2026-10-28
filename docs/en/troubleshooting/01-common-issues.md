@@ -72,9 +72,10 @@
 response comes back — the error text contains `fetch failed`, `ENOTFOUND`,
 or `EAI_AGAIN`, rather than a JSON error body with an HTTP status.
 
-**How to tell this apart from other Gemini failures.** `server/src/lib/
-error-classify.ts` already distinguishes these by shape, not by guessing —
-check which bucket the actual error falls into before assuming a cause:
+**How to tell this apart from other Gemini failures.**
+`server/src/lib/error-classify.ts` already distinguishes these by shape, not
+by guessing — check which bucket the actual error falls into before assuming
+a cause:
 
 | Failure kind | What you'll see | Where it's classified |
 | --- | --- | --- |

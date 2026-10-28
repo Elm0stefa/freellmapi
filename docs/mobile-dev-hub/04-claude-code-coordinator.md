@@ -65,13 +65,21 @@ per-process router state disagreeing between the two servers.
 2. **Create its `.env`** from
    [`examples/claude-code-coordinator/.env.coordinator.example`](../../examples/claude-code-coordinator/.env.coordinator.example).
    It sets, for this instance only:
-   - a fresh `ENCRYPTION_KEY` (generate with
-     `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-     — never reuse another instance's key, never commit the real value);
+   - `ENCRYPTION_KEY`, left as the exact placeholder the template ships with
+     (`your-64-char-hex-key-here`) for now — `server/src/lib/crypto.ts`
+     recognizes that specific string as "unset" and auto-generates a local
+     key file outside production, so the server still boots. Replace it with
+     a freshly generated key
+     (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+     before this instance handles any real provider key; never reuse another
+     instance's key, never commit the real value;
    - its own port (`PORT=3002` in the template, pick any free port);
    - `HOST=127.0.0.1` — no reason for the coordinator's backend to be
      reachable from other devices;
-   - its own `FREEAPI_DB_PATH`, separate from any other instance's database;
+   - `FREEAPI_DB_PATH` left unset: `server/src/db/index.ts` resolves the
+     default database path relative to that checkout's own location, so a
+     separate clone (step 1) already gets its own database file with no
+     extra configuration;
    - `FREE_ONLY_ROUTING=on` and no `FREE_ONLY_ALLOW_PLATFORMS` — see §7.
 3. **First-run account and unified key** happen the normal way: the first
    browser to open the dashboard on that port creates the first account
@@ -240,18 +248,20 @@ curl -X PUT http://127.0.0.1:3002/api/settings/enable-mcp \
 or toggle it off on the Keys page.
 
 **Retire the dedicated instance entirely:** stop its process, then delete
-*only its own* database file (`FREEAPI_DB_PATH`) and, if one was
-auto-generated, its `.encryption-key` file next to that database
-(`server/src/lib/crypto.ts`). Never touch another instance's database or key
-file while doing this — they are unrelated files once the instances are
-separate per §2.
+*only its own* database file — `server/data/freeapi.db` inside that
+checkout by default, or wherever `FREEAPI_DB_PATH` points if you set one —
+and, if a key was auto-generated, its `.encryption-key` file next to that
+database (`server/src/lib/crypto.ts`). Never touch another instance's
+database or key file while doing this — they are unrelated files once the
+instances are separate per §2.
 
 **Common connection issues:**
 
 - **Claude Code can't reach the endpoint at all:** confirm the dedicated
-  instance is actually running on the port in your `.mcp.json`/`claude mcp
-  add` command, and that the MCP surface is enabled (§2 step 4) — while off,
-  every verb on `/mcp` answers `403` with a JSON-RPC error saying so.
+  instance is actually running on the port in your `.mcp.json`/
+  `claude mcp add` command, and that the MCP surface is enabled (§2 step 4)
+  — while off, every verb on `/mcp` answers `403` with a JSON-RPC error
+  saying so.
 - **401 from `/mcp`:** the Bearer token doesn't match that instance's current
   unified key (`server/src/routes/mcp.ts`'s `authenticate`). Regenerating the
   unified key on the dashboard invalidates the old one everywhere, including
