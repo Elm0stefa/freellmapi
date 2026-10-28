@@ -101,7 +101,9 @@ some free tiers may use your prompts for training.
 **Avoid, or read the notes first [repo]:**
 
 - **Kilo:** keyless `:free` routes log prompts for training.
-- **Cohere:** the repo's README marks it "Avoid for personal use".
+- **Cohere:** a trial key (1,000 calls/month), not a permanent free tier. A
+  catalog migration comment says an earlier terms review marked it "Avoid for
+  personal use"; that review table is no longer in the README.
 - **OpenCode Zen and Reka:** no usable free tier any more.
 - **Sail:** needs a payment method, and charges beyond its monthly credit.
 
