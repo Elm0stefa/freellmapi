@@ -35,17 +35,37 @@ export function isAuthError(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 401 || err.status === 403)
 }
 
-// The only endpoints GLIXEL may write to: its chat endpoint and the existing
-// conversation store. Anything else is refused before the network.
-const WRITABLE = [/^\/api\/glixel\/chat$/, /^\/api\/conversations(\/\d+)?$/]
+// Every write GLIXEL can make, by method and path: its chat endpoint, the
+// existing conversation store, and three existing Control Room actions (add a
+// key, check one key, switch the routing strategy). Anything else, such as
+// reading a key back, deleting keys or changing settings, is refused first.
+type WriteMethod = 'POST' | 'PUT' | 'DELETE'
+const WRITABLE: Array<[WriteMethod, RegExp]> = [
+  ['POST', /^\/api\/glixel\/chat$/],
+  ['POST', /^\/api\/conversations$/],
+  ['PUT', /^\/api\/conversations\/\d+$/],
+  ['DELETE', /^\/api\/conversations\/\d+$/],
+  ['POST', /^\/api\/keys$/],
+  ['POST', /^\/api\/health\/check\/\d+$/],
+  ['PUT', /^\/api\/fallback\/routing$/],
+]
 
-export function isWritablePath(path: string): boolean {
-  return WRITABLE.some(re => re.test(path))
+export function isWritable(method: WriteMethod, path: string): boolean {
+  return WRITABLE.some(([m, re]) => m === method && re.test(path))
+}
+
+/** The server's own error message, when it sent one. Never echoes request data. */
+async function serverMessage(res: Response): Promise<string | null> {
+  try {
+    const body = await res.json() as { error?: { message?: unknown } | string }
+    const msg = typeof body.error === 'string' ? body.error : body.error?.message
+    return typeof msg === 'string' && msg ? msg : null
+  } catch { return null }
 }
 
 /** Authenticated request with a JSON body (or none). Returns the raw Response. */
-export async function apiSend(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
-  if (!isWritablePath(path)) throw new Error(`GLIXEL does not write to ${path}`)
+export async function apiSend(method: WriteMethod, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
+  if (!isWritable(method, path)) throw new Error(`GLIXEL does not ${method} ${path}`)
   const token = getSessionToken()
   if (!token) throw new ApiError(401, 'Not signed in')
   return fetch(path, {
@@ -59,9 +79,9 @@ export async function apiSend(method: 'POST' | 'PUT' | 'DELETE', path: string, b
 }
 
 /** apiSend that expects a JSON answer and throws ApiError otherwise. */
-export async function apiSendJson<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
+export async function apiSendJson<T>(method: WriteMethod, path: string, body?: unknown): Promise<T> {
   const res = await apiSend(method, path, body)
-  if (!res.ok) throw new ApiError(res.status, `${path} answered ${res.status}`)
+  if (!res.ok) throw new ApiError(res.status, await serverMessage(res) ?? `${path} answered ${res.status}`)
   const text = await res.text()
   return (text ? JSON.parse(text) : {}) as T
 }

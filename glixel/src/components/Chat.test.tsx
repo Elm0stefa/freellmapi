@@ -66,7 +66,7 @@ async function type(text: string) {
   await act(async () => { setter.call(ta, text); ta.dispatchEvent(new Event('input', { bubbles: true })) })
 }
 async function send(text: string) { await type(text); await act(async () => { button('Send').click() }); await settle() }
-const bubbles = () => [...container.querySelectorAll('[data-testid="message"]')].map(li => ({ role: li.getAttribute('data-role'), text: li.textContent }))
+const bubbles = () => [...container.querySelectorAll('[data-testid="message"]')].map(li => ({ role: li.getAttribute('data-role'), text: li.querySelector('[data-testid="message-text"]')?.textContent ?? '' }))
 
 describe('GLIXEL chat', () => {
   it('opens on the chat tab and streams a reply with the real route under it', async () => {
@@ -157,11 +157,11 @@ describe('GLIXEL chat', () => {
     expect(calls.filter(c => c.method === 'DELETE').map(c => c.url)).toEqual(['/api/conversations/7'])
   })
 
-  it('switches to the status tab without leaving the app', async () => {
+  it('switches to the control room without leaving the app', async () => {
     await mount()
-    await act(async () => { button('Status').click() })
+    await act(async () => { button('Control').click() })
     await settle()
-    expect(window.location.hash).toBe('#status')
+    expect(window.location.hash).toBe('#control')
     expect(container.querySelector('[data-telemetry="GET /api/providers"]')).not.toBeNull()
   })
 })

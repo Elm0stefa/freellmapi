@@ -185,4 +185,76 @@ describe('POST /api/glixel/chat', () => {
     for (const k of Object.values(PROVIDER_KEYS)) expect(r.text).not.toContain(k);
     expect(r.text).not.toContain(getUnifiedApiKey());
   });
+
+  it('refuses the unavailable Claude path without contacting anything or switching paths', async () => {
+    await addKey('groq');
+    const r = await call(app, 'POST', '/api/glixel/chat', { messages: [{ role: 'user', content: 'hi' }], provider: 'claude' });
+    expect(r.status).toBe(503);
+    expect(r.json.error.code).toBe('provider_unavailable');
+    expect(r.json.error.provider).toBe('claude');
+    expect(r.json.error.message).toMatch(/Anthropic API key/);
+    expect(upstream).toHaveLength(0);
+  });
+
+  it('accepts an explicit FreeLLMAPI path and rejects unknown paths', async () => {
+    await addKey('groq');
+    const ok = await call(app, 'POST', '/api/glixel/chat', { messages: [{ role: 'user', content: 'hi' }], provider: 'freellmapi' });
+    expect(ok.status).toBe(200);
+    const bad = await call(app, 'POST', '/api/glixel/chat', { messages: [{ role: 'user', content: 'hi' }], provider: 'openai' });
+    expect(bad.status).toBe(400);
+    expect(upstream).toHaveLength(1);
+  });
+});
+
+describe('GET /api/glixel/capabilities', () => {
+  let app: Express;
+  beforeAll(() => {
+    process.env.ENCRYPTION_KEY = '0'.repeat(64);
+    initDb(':memory:');
+    app = createApp();
+    dashToken = mintDashboardToken();
+  });
+  afterEach(() => {
+    delete process.env.FREE_ONLY_ROUTING;
+    delete process.env.FREE_ONLY_ALLOW_PLATFORMS;
+    delete process.env.FALLBACK_MAX_ATTEMPTS;
+  });
+
+  it('requires a dashboard session', async () => {
+    expect((await call(app, 'GET', '/api/glixel/capabilities', undefined, { Authorization: '' })).status).toBe(401);
+    expect((await call(app, 'GET', '/api/glixel/capabilities', undefined, { Authorization: `Bearer ${getUnifiedApiKey()}` })).status).toBe(401);
+  });
+
+  it('reports FreeLLMAPI as the default, Claude as unavailable, and the env-set routing policy', async () => {
+    process.env.FALLBACK_MAX_ATTEMPTS = '7';
+    process.env.FREE_ONLY_ALLOW_PLATFORMS = 'custom';
+    const r = await call(app, 'GET', '/api/glixel/capabilities');
+    expect(r.status).toBe(200);
+    expect(r.json.defaultProvider).toBe('freellmapi');
+    expect(r.json.providers.map((p: any) => [p.id, p.available])).toEqual([['freellmapi', true], ['claude', false]]);
+    expect(r.json.providers[0].billing).toBe('free models only');
+    expect(r.json.providers[1].reason).toMatch(/billed separately/);
+    expect(r.json.routing).toMatchObject({ source: 'environment', fallbackMaxAttempts: 7, freeOnly: { enabled: true } });
+    expect(r.json.routing.freeOnly.optedIn.map((o: any) => o.platform)).toEqual(['custom']);
+  });
+
+  it('says so when free-only routing has been turned off', async () => {
+    process.env.FREE_ONLY_ROUTING = 'off';
+    const r = await call(app, 'GET', '/api/glixel/capabilities');
+    expect(r.json.routing.freeOnly.enabled).toBe(false);
+    expect(r.json.providers[0].billing).toBe('free-only routing is off');
+  });
+
+  it('a strategy-only routing change (as the Control Room sends it) keeps every other routing setting', async () => {
+    const before = (await call(app, 'GET', '/api/fallback/routing')).json;
+    const next = before.strategy === 'fastest' ? 'balanced' : 'fastest';
+    expect((await call(app, 'PUT', '/api/fallback/routing', { strategy: next })).status).toBe(200);
+    const after = (await call(app, 'GET', '/api/fallback/routing')).json;
+    expect(after.strategy).toBe(next);
+    for (const k of ['exploreEnabled', 'keySelectionStrategy', 'cooldownCeilingMs', 'peakHoursAdjust', 'peakStartHour', 'peakEndHour', 'peakTimezone', 'customWeights']) {
+      expect(after[k], k).toEqual(before[k]);
+    }
+    expect(after.decision?.model).toEqual(before.decision?.model);
+    await call(app, 'PUT', '/api/fallback/routing', { strategy: before.strategy });
+  });
 });

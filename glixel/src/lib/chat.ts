@@ -54,7 +54,7 @@ export function parseSseChunk(buffer: string): { events: Array<Record<string, un
 
 export async function streamChat(
   turns: ChatTurn[],
-  opts: { conversationId?: number; signal?: AbortSignal } & StreamHandlers = {},
+  opts: { conversationId?: number; provider?: string; signal?: AbortSignal } & StreamHandlers = {},
 ): Promise<ChatOutcome> {
   const outcome: ChatOutcome = { route: null, text: '', finishReason: null, latencyMs: null, error: null, aborted: false }
   let res: Response
@@ -62,6 +62,7 @@ export async function streamChat(
     res = await apiSend('POST', '/api/glixel/chat', {
       messages: turns,
       ...(opts.conversationId ? { conversationId: opts.conversationId } : {}),
+      ...(opts.provider && opts.provider !== 'freellmapi' ? { provider: opts.provider } : {}),
     }, opts.signal)
   } catch (err) {
     if (opts.signal?.aborted) return { ...outcome, aborted: true }
@@ -132,6 +133,7 @@ export function errorHint(code: string | null, status: number | null): string | 
     case 'provider_authentication_failed': return 'A provider rejected its key. Check it on the dashboard\'s Providers page.'
     case 'conversation_too_long': return 'This conversation is too long. Start a new one.'
     case 'network_error': return 'Is the FreeLLMAPI server running?'
+    case 'provider_unavailable': return 'Switch the AI path back to FreeLLMAPI to keep chatting.'
     default: return status === 401 ? 'Your session has expired. Sign in on the dashboard again.' : null
   }
 }

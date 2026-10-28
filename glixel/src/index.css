@@ -162,6 +162,47 @@ html, body {
 }
 .glx-tab-active { color: var(--color-glx-cyan); box-shadow: inset 0 2px 0 var(--color-glx-cyan); }
 
+/* ── Markdown in replies ─────────────────────────────────────────────── */
+.glx-md { overflow-wrap: anywhere; }
+.glx-md > * + * { margin-top: 0.6rem; }
+.glx-md h1, .glx-md h2, .glx-md h3, .glx-md h4 { font-weight: 600; line-height: 1.3; margin-top: 0.9rem; }
+.glx-md h1 { font-size: 1.15rem; } .glx-md h2 { font-size: 1.05rem; } .glx-md h3, .glx-md h4 { font-size: 0.95rem; }
+.glx-md > :first-child { margin-top: 0; }
+.glx-md ul { list-style: disc; padding-left: 1.25rem; }
+.glx-md ol { list-style: decimal; padding-left: 1.25rem; }
+.glx-md li + li { margin-top: 0.25rem; }
+.glx-md blockquote { border-left: 2px solid var(--color-glx-violet); padding-left: 0.75rem; color: var(--color-glx-muted); }
+.glx-md hr { border-color: var(--color-glx-line); }
+.glx-md :not(pre) > code { font-family: var(--font-mono); font-size: 0.85em; background: var(--color-glx-obsidian); border: 1px solid var(--color-glx-line); padding: 0 0.3em; }
+.glx-md-pre { background: var(--color-glx-void); border: 1px solid var(--color-glx-line); }
+.glx-md-pre pre { overflow-x: auto; padding: 0.75rem; padding-top: 2.1rem; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.5; }
+.glx-md-table { overflow-x: auto; max-width: 100%; }
+.glx-md-table table { border-collapse: collapse; font-size: 0.85rem; }
+.glx-md-table th, .glx-md-table td { border: 1px solid var(--color-glx-line); padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
+.glx-md-table th { background: var(--color-glx-obsidian); font-weight: 600; }
+.glx-md-link { color: var(--color-glx-cyan); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.glx-chip-button {
+  font-family: var(--font-mono); font-size: 0.7rem; padding: 0.3rem 0.55rem; min-height: 1.9rem;
+  border: 1px solid var(--color-glx-line); color: var(--color-glx-muted); background: var(--color-glx-obsidian);
+}
+.glx-chip-button:hover { color: var(--color-glx-cyan); border-color: var(--color-glx-cyan); }
+.glx-select {
+  background: var(--color-glx-obsidian); border: 1px solid var(--color-glx-line); color: var(--color-glx-text);
+  padding: 0.55rem 0.6rem; font-size: 16px; max-width: 100%;
+}
+
+/* ── Voice ───────────────────────────────────────────────────────────────── */
+.glx-mic {
+  display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; flex-shrink: 0;
+  border: 1px solid var(--color-glx-line); color: var(--color-glx-muted);
+}
+.glx-mic:disabled { opacity: 0.4; }
+.glx-mic-active { border-color: var(--color-glx-bad); color: var(--color-glx-bad); background: rgb(248 113 113 / 0.12); }
+.glx-voice-panel { border: 1px solid var(--color-glx-line); background: var(--color-glx-surface); padding: 0.75rem; margin-top: 0.5rem; }
+.glx-voice-live { border-color: var(--color-glx-bad); }
+.glx-voice-note { font-size: 0.75rem; padding-top: 0.4rem; color: var(--color-glx-muted); }
+.glx-rec-dot { width: 0.6rem; height: 0.6rem; border-radius: 9999px; background: var(--color-glx-bad); animation: glx-pulse 1.2s ease-in-out infinite; }
+
 /* ── Decorative core ─────────────────────────────────────────────────────── */
 .glx-cell { fill: var(--color-glx-cyan); }
 .glx-ring-0 { fill: var(--color-glx-violet); animation: glx-pulse 2.4s ease-in-out infinite; }
@@ -174,5 +215,5 @@ html, body {
 @keyframes glx-drift { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .glx-core, .glx-cell, .glx-typing { animation: none !important; }
+  .glx-core, .glx-cell, .glx-typing, .glx-rec-dot { animation: none !important; }
 }

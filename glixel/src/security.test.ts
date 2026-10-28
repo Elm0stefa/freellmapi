@@ -4,9 +4,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // Static guarantees: GLIXEL never touches key-bearing or proxy endpoints, writes
-// only to its chat endpoint and the existing conversation store, writes nothing
-// to browser storage, and bakes no environment into its bundle. Scans the
-// source, and the built bundle when one exists.
+// only to its chat endpoint, the existing conversation store and three existing
+// Control Room actions, writes nothing to browser storage, and bakes no
+// environment into its bundle. Scans the source, and the built bundle when one
+// exists.
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const sources = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
@@ -19,6 +20,7 @@ const files = sources(here).map(p => ({ p: path.relative(here, p), src: fs.readF
 describe('GLIXEL source', () => {
   it.each([
     ['the unified-key endpoint', /api-key/],
+    ['key reveal or export', /\/reveal|\/export|keys\/import/],
     ['the /v1 proxy', /['"`]\/v1\//],
     ['PATCH', /['"]PATCH['"]/],
     ['storage writes', /(localStorage|sessionStorage)\.(setItem|removeItem|clear)/],
@@ -30,16 +32,20 @@ describe('GLIXEL source', () => {
 
   it('reads only the session-gated endpoints it needs', () => {
     const reads = new Set(files.flatMap(({ src }) => [...src.matchAll(/apiGet(?:<.*?>)?\(['`]([^'`$]+)/g)].map(m => m[1])))
-    expect([...reads].sort()).toEqual(['/api/conversations', '/api/conversations/', '/api/health', '/api/providers'])
+    expect([...reads].sort()).toEqual([
+      '/api/analytics/requests?range=24h&limit=10', '/api/conversations', '/api/conversations/', '/api/fallback/routing',
+      '/api/glixel/capabilities', '/api/health', '/api/keys/providers', '/api/providers',
+    ])
   })
 
-  it('writes only to the chat endpoint and the conversation store', () => {
+  it('writes only to the chat endpoint, the conversation store and the listed Control Room actions', () => {
     const writes = files.flatMap(({ src }) => [...src.matchAll(/apiSend(?:Json)?(?:<[^>]*>)?\(\s*'(POST|PUT|DELETE)',\s*['`]([^'`$]+)/g)].map(m => `${m[1]} ${m[2]}`))
     expect([...new Set(writes)].sort()).toEqual([
-      'DELETE /api/conversations/', 'POST /api/conversations', 'POST /api/glixel/chat', 'PUT /api/conversations/',
+      'DELETE /api/conversations/', 'POST /api/conversations', 'POST /api/glixel/chat', 'POST /api/health/check/', 'POST /api/keys',
+      'PUT /api/conversations/', 'PUT /api/fallback/routing',
     ])
     const session = files.find(f => f.p.endsWith('session.ts'))!.src
-    expect(session).toMatch(/const WRITABLE = \[/)
+    expect(session).toMatch(/const WRITABLE\b/)
   })
 })
 

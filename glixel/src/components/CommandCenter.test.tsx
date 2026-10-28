@@ -108,7 +108,9 @@ describe('with a session', () => {
   it('renders real figures from the existing endpoints', async () => {
     const fetch = stubApi({ '/api/providers': json(PROVIDERS), '/api/health': json(HEALTH) })
     await render(<App />)
-    expect(fetch.mock.calls.map(c => c[0]).sort()).toEqual(['/api/health', '/api/providers'])
+    const urls = fetch.mock.calls.map(c => c[0])
+    expect(urls).toEqual(expect.arrayContaining(['/api/health', '/api/providers']))
+    expect(fetch.mock.calls.every(c => !(c as unknown[])[1] || !((c as unknown[])[1] as RequestInit).method)).toBe(true) // reads only
     expect(text('free-only')).toBe('On')
     expect(text('connected')).toBe('1')
     expect(text('auto-models')).toBe('5') // google is connected; cohere (unhealthy) and mistral (not set up) add nothing

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { errorHint, parseSseChunk, streamChat, toChatTurns } from './chat'
-import { apiSend, isWritablePath, SESSION_TOKEN_KEY } from './session'
+import { apiSend, isWritable, SESSION_TOKEN_KEY } from './session'
 
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear() })
 
@@ -33,18 +33,22 @@ describe('toChatTurns', () => {
 })
 
 describe('write allowlist', () => {
-  it('accepts only the chat endpoint and the conversation store', () => {
-    expect(isWritablePath('/api/glixel/chat')).toBe(true)
-    expect(isWritablePath('/api/conversations')).toBe(true)
-    expect(isWritablePath('/api/conversations/12')).toBe(true)
-    for (const p of ['/api/keys', '/api/settings/api-key', '/v1/chat/completions', '/api/conversations/1/x', '/api/glixel/chat/x']) {
-      expect(isWritablePath(p), p).toBe(false)
+  it('accepts only the listed method and path pairs', () => {
+    for (const [m, p] of [['POST', '/api/glixel/chat'], ['POST', '/api/conversations'], ['PUT', '/api/conversations/12'], ['DELETE', '/api/conversations/12'],
+      ['POST', '/api/keys'], ['POST', '/api/health/check/3'], ['PUT', '/api/fallback/routing']] as const) {
+      expect(isWritable(m, p), `${m} ${p}`).toBe(true)
+    }
+    for (const [m, p] of [['DELETE', '/api/keys/3'], ['POST', '/api/keys/3/reveal'], ['POST', '/api/keys/import'], ['POST', '/api/settings/api-key/regenerate'],
+      ['PUT', '/api/settings/proxy'], ['POST', '/v1/chat/completions'], ['POST', '/api/conversations/1/x'], ['POST', '/api/glixel/chat/x'],
+      ['DELETE', '/api/conversations'], ['DELETE', '/api/fallback/penalty-inspector'], ['POST', '/api/health/check-all'], ['PUT', '/api/keys']] as const) {
+      expect(isWritable(m, p), `${m} ${p}`).toBe(false)
     }
   })
-  it('refuses other paths before the network', async () => {
+  it('refuses other writes before the network', async () => {
     localStorage.setItem(SESSION_TOKEN_KEY, 't')
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
-    await expect(apiSend('POST', '/api/keys', {})).rejects.toThrow(/does not write/)
+    await expect(apiSend('POST', '/api/keys/1/reveal', {})).rejects.toThrow(/does not POST/)
+    await expect(apiSend('DELETE', '/api/keys/1')).rejects.toThrow(/does not DELETE/)
     expect(fetch).not.toHaveBeenCalled()
   })
 })

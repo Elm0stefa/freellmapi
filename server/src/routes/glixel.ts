@@ -13,11 +13,18 @@
 //   {"type":"done","finishReason","promptTokens","completionTokens","latencyMs"}
 //   {"type":"error","message","code"}
 // Errors before the stream starts are plain JSON with an HTTP status.
+//
+// GET /api/glixel/capabilities — which AI paths exist and whether they work,
+// plus the routing policy, which is set by environment variables and so is
+// read-only here. Contains no key material.
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { runInboundChat, type InboundChatWire } from '../lib/inbound-chat.js';
 import { GLIXEL_PERSONA } from '../glixel/persona.js';
+import { GLIXEL_DEFAULT_PROVIDER, GLIXEL_PROVIDER_IDS, glixelProviders } from '../glixel/providers.js';
+import { freeOnlyPolicySummary, isFreeOnlyEnabled } from '../services/free-only.js';
+import { getFallbackMaxAttempts } from '../lib/fallback-loop.js';
 
 export const glixelRouter = Router();
 
@@ -32,6 +39,9 @@ const chatSchema = z.object({
     content: z.string().max(GLIXEL_MAX_MESSAGE_CHARS),
   }).strict()).min(1).max(GLIXEL_MAX_MESSAGES),
   conversationId: z.number().int().positive().optional(),
+  // The user's explicit choice of AI path. An unavailable path is refused,
+  // never swapped for another one.
+  provider: z.enum(GLIXEL_PROVIDER_IDS).default(GLIXEL_DEFAULT_PROVIDER),
 }).strict();
 
 function header(res: Response, name: string): string | undefined {
@@ -92,13 +102,30 @@ export function glixelWire(startedAt: number): InboundChatWire {
   };
 }
 
+glixelRouter.get('/capabilities', (_req: Request, res: Response) => {
+  res.json({
+    providers: glixelProviders(isFreeOnlyEnabled()),
+    defaultProvider: GLIXEL_DEFAULT_PROVIDER,
+    routing: {
+      source: 'environment',
+      freeOnly: freeOnlyPolicySummary(),
+      fallbackMaxAttempts: getFallbackMaxAttempts(),
+    },
+  });
+});
+
 glixelRouter.post('/chat', async (req: Request, res: Response) => {
   const parsed = chatSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: { message: parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; '), code: 'invalid_request' } });
     return;
   }
-  const { messages, conversationId } = parsed.data;
+  const { messages, conversationId, provider } = parsed.data;
+  const path = glixelProviders(isFreeOnlyEnabled()).find(p => p.id === provider)!;
+  if (!path.available) {
+    res.status(503).json({ error: { message: path.reason, code: 'provider_unavailable', provider } });
+    return;
+  }
   const total = messages.reduce((n, m) => n + m.content.length, 0);
   if (total > GLIXEL_MAX_TOTAL_CHARS) {
     res.status(413).json({ error: { message: `Conversation is too long (${total} characters; the limit is ${GLIXEL_MAX_TOTAL_CHARS}). Start a new conversation.`, code: 'conversation_too_long' } });
