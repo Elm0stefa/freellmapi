@@ -1,8 +1,8 @@
 // GET /api/providers (dashboard session) — read-only overview of every
 // registered provider for the dashboard's Providers page: static metadata
-// (providers/metadata.ts), the
-// free-only routing verdict (services/free-only.ts), and live state read from
-// the same tables the Keys, Health and Analytics pages use. Not to be confused
+// (providers/metadata.ts), the free-only routing verdict
+// (services/free-only.ts), and live state read from the same tables the Keys,
+// Health and Analytics pages use. Not to be confused
 // with GET /v1/providers (routes/status.ts), the machine-readable status
 // endpoint for orchestrators behind the unified API key.
 //

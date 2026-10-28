@@ -178,6 +178,26 @@ Provider classifications come only from this repository's own notes. None
 has been checked against official documentation yet (`officialDocsVerifiedOn`
 is empty for every provider), so treat them as best-effort.
 
+### Providers page
+
+Dashboard → **Models → Providers** (`/models/providers`) shows every chat
+provider on one screen:
+- its state (connected, unhealthy, disabled, not set up) and free-tier class;
+- whether automatic routing uses it, and the reason when it doesn't;
+- its last health check, 24-hour requests, success rate and latency, and
+  active cooldowns;
+- remaining quota only when the provider itself reported it;
+- where the free-tier classification comes from.
+
+Its buttons use the existing endpoints: **Test**, the enable/disable switch,
+**Check all keys** and **Resync catalog**. A provider with no key shows
+**Add your key**, which opens the Keys page with that provider preselected. A
+passing key test proves the key works; it isn't a quota measurement.
+
+The same data is available as JSON at `GET /api/providers`. It needs a
+dashboard login; the unified proxy key is refused. It never returns key
+material.
+
 ## 5. Secrets and backups
 
 - **Where provider keys go:** enter them only on the dashboard **Keys** page.
